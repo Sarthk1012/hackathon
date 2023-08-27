@@ -4,6 +4,7 @@ from slack_sdk.signature import SignatureVerifier
 from dotenv import load_dotenv
 from controllers.ask_daily_updates_controller.app import ask_daily_updates_controller
 from modules.get_response_from_prompt import get_response_from_prompt
+from modules.jira import get_jira_issue
 from controllers.send_daily_updates_to_pm.app import send_daily_updates_to_pm_controller
 
 load_dotenv()
@@ -57,6 +58,12 @@ async def handle_slack_events(body, headers, data):
 @app.get("/ask-daily-updates")
 async def ask_daily_updates():
     await ask_daily_updates_controller()
+
+
+@app.get("/jira")
+async def get_jira_stuff():
+    response = await get_jira_issue()
+    return JSONResponse(content={"data": response}, status_code=200)
 
 
 @app.post("/slack/events")
