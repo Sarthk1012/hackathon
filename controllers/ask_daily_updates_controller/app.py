@@ -9,18 +9,27 @@ def fetch_jira_tickets(user_email: str):
 
 async def ask_update_for_ticket_of_particular_user(user_email: str):
     user_jira_tickets = fetch_jira_tickets(user_email)
-    # Ask the user for an update for each ticket
-    combined_tickets_string = ", ".join(user_jira_tickets)
-    message = "What is the update for {}?. Please reply for each ticket in a separate messgae".format(
-        combined_tickets_string
-    )
-    await send_message_to_user(user_email, message)
+    blocks = []
+    for ticket in user_jira_tickets:
+        blocks.append(
+            {
+                "dispatch_action": True,
+                "type": "input",
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "JIRA_TICKET_UPDATE_ACTION___" + ticket,
+                },
+                "label": {"type": "plain_text", "text": ticket, "emoji": True},
+            }
+        )
+    message = "What is the update for the following Jira tickets"
+    await send_message_to_user(user_email, message, blocks)
     return "message sent"
 
 
 async def ask_daily_updates_controller():
     # Fetches all users from the database
-    users = ["duggal.sarthak12@gmail.com"]
+    users = ["singh.raviranjan6@gmail.com"]
 
     for user in users:
         await ask_update_for_ticket_of_particular_user(user)

@@ -1,10 +1,13 @@
 from fastapi import FastAPI, Request, BackgroundTasks
 from fastapi.responses import JSONResponse
-from slack_sdk.signature import SignatureVerifier
 from dotenv import load_dotenv
+from controllers.add_to_watchlist.app import add_to_watchlist
 from controllers.ask_daily_updates_controller.app import ask_daily_updates_controller
-from modules.get_response_from_prompt import get_response_from_prompt
-from controllers.send_daily_updates_to_pm.app import send_daily_updates_to_pm_controller
+from controllers.send_reply_to_chat.app import send_reply_to_chat
+from tasks.app import handle_slack_events, handle_ticket_update
+import urllib.parse
+import json
+
 
 load_dotenv()
 
@@ -25,35 +28,6 @@ app = FastAPI()
 #     return {"message": "Event received"}
 
 
-async def handle_slack_events(body, headers, data):
-    try:
-        verifier = SignatureVerifier("f175948102001cbe9fd4e227d3a97419")
-
-        if not verifier.is_valid_request(body, headers):
-            return "Unauthorized", 403
-
-        if (
-            "event" in data
-            and "text" in data["event"]
-            and data["event"].get("type") == "message"
-            and data["event"].get("client_msg_id") is not None
-        ):
-            event = data["event"]
-            message_text = event["text"]
-            print("message_text", message_text)
-            status = get_response_from_prompt(
-                f"Provide a one-word JIRA status for the developer comment: {message_text}"
-            )
-            print("status", status)
-            await send_daily_updates_to_pm_controller(
-                {"JIRA-1": status}, "duggal.sarthak12@gmail.com"
-            )
-            return JSONResponse(content={"message": "Event received"}, status_code=200)
-    except Exception as e:
-        print(e)
-        return f"Error posting message: {str(e)}", 500
-
-
 @app.get("/ask-daily-updates")
 async def ask_daily_updates():
     await ask_daily_updates_controller()
@@ -64,6 +38,91 @@ async def slack_events(request: Request, background_tasks: BackgroundTasks):
     body = await request.body()
     headers = request.headers
     data = await request.json()
-    print("body", body)
     background_tasks.add_task(handle_slack_events, body, headers, data)
     return JSONResponse(content={"message": "Event received"}, status_code=200)
+
+
+@app.post("/slack/triggers")
+async def slack_triggers(request: Request, background_tasks: BackgroundTasks):
+    body = await request.body()
+    decoded_payload = urllib.parse.unquote(body.split(b"=")[1].decode("utf-8"))
+    data = json.loads(decoded_payload)
+    current_action = data.get("actions")[0]
+    user = data.get("user")
+    action_id = current_action.get("action_id")
+    value = current_action.get("value")
+    user_id = user.get("id")
+    split_string = "ACTION___"
+
+    if action_id.startswith("WATCH_TICKET_ACTION__"):
+        background_tasks.add_task(
+            add_to_watchlist, user_id, current_action.get("selected_options")
+        )
+
+    if action_id.startswith("START_CHAT_ACTION__"):
+        background_tasks.add_task(send_reply_to_chat, value, user_id)
+    if action_id.startswith("JIRA_TICKET_UPDATE_ACTION"):
+        action_id = action_id.split(split_string)[1]
+        background_tasks.add_task(handle_ticket_update, action_id, value, user_id)
+
+    return JSONResponse(content={"message": "Triggered"}, status_code=200)
+
+
+@app.post("/slack/ask")
+async def slack_chat(request: Request):
+    blocks = [
+        {
+            "type": "input",
+            "dispatch_action": True,
+            "element": {
+                "type": "plain_text_input",
+                "multiline": True,
+                "action_id": "START_CHAT_ACTION__",
+            },
+            "label": {
+                "type": "plain_text",
+                "text": "Please type your query here",
+                "emoji": True,
+            },
+        }
+    ]
+
+    content = {"blocks": blocks}
+
+    return JSONResponse(content=content, status_code=200)
+
+
+async def fetch_jira_tickets_from_sprint():
+    return ["JIRA-1", "JIRA-2", "JIRA-3"]
+
+
+@app.post("/slack/watch-ticket")
+async def slack_watch_ticket(request: Request):
+    current_sprint_tickets = await fetch_jira_tickets_from_sprint()
+    options = []
+    for ticket in current_sprint_tickets:
+        options.append(
+            {
+                "text": {
+                    "type": "plain_text",
+                    "text": ticket,
+                    "emoji": True,
+                },
+                "value": ticket,
+            },
+        )
+    content = {
+        "blocks": [
+            {
+                "type": "actions",
+                "elements": [
+                    {
+                        "type": "checkboxes",
+                        "options": options,
+                        "action_id": "WATCH_TICKET_ACTION__",
+                    }
+                ],
+            }
+        ]
+    }
+    return JSONResponse(content=content, status_code=200)
