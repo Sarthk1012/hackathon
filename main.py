@@ -8,6 +8,8 @@ from tasks.app import handle_slack_events, handle_ticket_update
 import urllib.parse
 import json
 
+from modules.jira import get_jira_issue
+
 
 load_dotenv()
 
@@ -31,6 +33,12 @@ app = FastAPI()
 @app.get("/ask-daily-updates")
 async def ask_daily_updates():
     await ask_daily_updates_controller()
+
+
+@app.get("/jira")
+async def get_jira_stuff():
+    response = await get_jira_issue()
+    return JSONResponse(content={"data": response}, status_code=200)
 
 
 @app.post("/slack/events")
