@@ -1,13 +1,15 @@
+import urllib.parse
+import re
+import json
 from fastapi import FastAPI, Request, BackgroundTasks
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from controllers.add_to_watchlist.app import add_to_watchlist
+from controllers.analize_ticket_relevance.app import analize_ticket_relevance
 from controllers.ask_daily_updates_controller.app import ask_daily_updates_controller
 from controllers.send_reply_to_chat.app import send_reply_to_chat
 from tasks.app import handle_slack_events, handle_ticket_update
-import urllib.parse
-import json
-from modules.jira import get_jira_issue
+from modules.jira import fetch_email_from_jira, get_jira_issue
 
 
 load_dotenv()
@@ -144,3 +146,32 @@ async def slack_watch_ticket(request: Request):
         ]
     }
     return JSONResponse(content=content, status_code=200)
+
+
+@app.post("/webhook/jira")
+async def analize_ticket_comment(request: Request):
+    data = await request.json()
+    comment = data.get("comment")
+    comment_body = comment.get("body")
+    issue = data.get("issue")
+    issue_key = issue.get("key")
+    output, all_addressed_persons = await replace_account_ids_with_emails(comment_body)
+    await analize_ticket_relevance(
+        issue_key, comment_body, output, all_addressed_persons
+    )
+    return "analize_ticket_comment"
+
+
+async def replace_account_ids_with_emails(input_string):
+    all_addressed_persons = []
+
+    def replace_account_id(match):
+        account_id = match.group(1)
+        user = fetch_email_from_jira(account_id)
+        email = user["emailAddress"] or ""
+        all_addressed_persons.append(email)
+        return email
+
+    pattern = r"\[~accountid:([^]]+)\]"
+    output_string = re.sub(pattern, replace_account_id, input_string)
+    return output_string, all_addressed_persons
