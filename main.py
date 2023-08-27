@@ -7,7 +7,6 @@ from controllers.send_reply_to_chat.app import send_reply_to_chat
 from tasks.app import handle_slack_events, handle_ticket_update
 import urllib.parse
 import json
-
 from modules.jira import get_jira_issue
 
 
@@ -101,22 +100,33 @@ async def slack_chat(request: Request):
 
 
 async def fetch_jira_tickets_from_sprint():
-    return ["JIRA-1", "JIRA-2", "JIRA-3"]
+    response = await get_jira_issue()
+    issues = response.get("issues") or []
+    shaped_issues = []
+    for issue in issues:
+        key = issue.get("key")
+        fields = issue.get("fields") or {}
+        summary = fields.get("summary") or ""
+        parent = fields.get("parent")
+        if parent:
+            shaped_issues.append({"id": key, "summary": summary})
+    return shaped_issues
 
 
 @app.post("/slack/watch-ticket")
 async def slack_watch_ticket(request: Request):
     current_sprint_tickets = await fetch_jira_tickets_from_sprint()
+
     options = []
     for ticket in current_sprint_tickets:
         options.append(
             {
                 "text": {
                     "type": "plain_text",
-                    "text": ticket,
+                    "text": ticket["id"] + ":" + ticket["summary"],
                     "emoji": True,
                 },
-                "value": ticket,
+                "value": ticket["id"],
             },
         )
     content = {
