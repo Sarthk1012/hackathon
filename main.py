@@ -1,33 +1,36 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, BackgroundTasks
+from fastapi.responses import JSONResponse
 from slack_sdk.signature import SignatureVerifier
 from dotenv import load_dotenv
 from controllers.ask_daily_updates_controller.app import ask_daily_updates_controller
 from modules.get_response_from_prompt import get_response_from_prompt
 from controllers.send_daily_updates_to_pm.app import send_daily_updates_to_pm_controller
 
-
 load_dotenv()
 
 app = FastAPI()
 
 
-@app.get("/ask-daily-updates")
-async def ask_daily_updates():
-    ask_daily_updates_controller()
+# @app.post("/slack/events")
+# async def handle_slack_events(request: Request):
+#     data = await request.json()
+
+#     # Check if the request has a challenge parameter
+#     if "challenge" in data:
+#         return {"challenge": data["challenge"]}
+
+#     # Handle other events as needed
+#     # Your event handling logic goes here
+
+#     return {"message": "Event received"}
 
 
-@app.post("/slack/events")
-async def slack_events(request: Request):
+async def handle_slack_events(body, headers, data):
     try:
         verifier = SignatureVerifier("f175948102001cbe9fd4e227d3a97419")
-        body = await request.body()
-
-        headers = dict(request.headers)
 
         if not verifier.is_valid_request(body, headers):
             return "Unauthorized", 403
-
-        data = await request.json()
 
         if (
             "event" in data
@@ -43,9 +46,24 @@ async def slack_events(request: Request):
             )
             print("status", status)
             await send_daily_updates_to_pm_controller(
-                {"JIRA-1": status}, "singh.raviranjan6@gmail.com"
+                {"JIRA-1": status}, "duggal.sarthak12@gmail.com"
             )
-            return "Success"
+            return JSONResponse(content={"message": "Event received"}, status_code=200)
     except Exception as e:
-        print("Error posting message", str(e))
+        print(e)
         return f"Error posting message: {str(e)}", 500
+
+
+@app.get("/ask-daily-updates")
+async def ask_daily_updates():
+    await ask_daily_updates_controller()
+
+
+@app.post("/slack/events")
+async def slack_events(request: Request, background_tasks: BackgroundTasks):
+    body = await request.body()
+    headers = request.headers
+    data = await request.json()
+    print("body", body)
+    background_tasks.add_task(handle_slack_events, body, headers, data)
+    return JSONResponse(content={"message": "Event received"}, status_code=200)
