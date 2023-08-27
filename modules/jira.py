@@ -1,4 +1,3 @@
-import httpx
 import requests
 import os
 from dotenv import load_dotenv
@@ -14,7 +13,6 @@ JIRA_API_BASE_URL = "https://tifin-hackathon.atlassian.net"
 
 async def get_jira_issue():
     url = f"{JIRA_API_BASE_URL}/rest/agile/1.0/board/1/issue"
-    print(url, JIRA_API_AUTH)
     try:
         response = requests.get(url, auth=JIRA_API_AUTH)
         response.raise_for_status()
@@ -22,3 +20,16 @@ async def get_jira_issue():
         return result
     except Exception as e:
         print("error", e)
+
+
+def fetch_email_from_jira(account_id):
+    url = f"{JIRA_API_BASE_URL}/rest/api/2/user?accountId={account_id}"
+    response = requests.get(url, auth=JIRA_API_AUTH)
+    try:
+        response = requests.get(url, auth=JIRA_API_AUTH)
+        response.raise_for_status()
+        result = response.json()
+        return result
+    except Exception as e:
+        print("error", e)
+        return None
