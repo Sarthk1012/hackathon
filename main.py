@@ -18,7 +18,7 @@ app = FastAPI()
 
 
 # @app.post("/slack/events")
-# async def handle_slack_events(request: Request):
+# async def handle_slack_events2(request: Request):
 #     data = await request.json()
 
 #     # Check if the request has a challenge parameter
