@@ -38,7 +38,8 @@ async def handle_ticket_update(
 ):
     status = get_response_from_prompt(
         f"""Provide a one-word JIRA status for the developer comment: {current_status_string}. Nothing less nothing more. Just the status as output.
-        Only choose your answer from ['In Progress','Delayed','Blocked','In QA','Not Started','Done']"""
+        Only choose your answer from ['In Progress','Delayed','Blocked','In QA','Not Started','Done']. Provide the answer as python list with single element whose value is the status.
+        For example, output should be like this: ['In Progress']."""
     )
     await send_daily_updates_to_pm_controller({"JIRA-1": status})
     return JSONResponse(content={"message": "Event received"}, status_code=200)
